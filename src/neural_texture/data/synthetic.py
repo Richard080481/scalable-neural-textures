@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
 import torch
+import torch.nn.functional as F
+from PIL import Image
 from torch.utils.data import Dataset
 
 
@@ -20,10 +23,11 @@ class SyntheticNeuralTextureDataset(Dataset[dict[str, Any]]):
         pattern: str = "gradient",
         view_scale: float = 1.0,
         mask_shape: str = "full",
+        image_path: str | None = None,
     ):
         if num_views <= 0 or height <= 1 or width <= 1:
             raise ValueError("num_views must be positive and spatial sizes must exceed one.")
-        if pattern not in {"gradient", "neon_mosaic", "voxel_atlas"}:
+        if pattern not in {"gradient", "neon_mosaic", "voxel_atlas", "image_atlas"}:
             raise ValueError(f"Unknown synthetic pattern: {pattern}")
         if not 0 < view_scale <= 1:
             raise ValueError("view_scale must be in (0, 1].")
@@ -35,6 +39,13 @@ class SyntheticNeuralTextureDataset(Dataset[dict[str, Any]]):
         self.pattern = pattern
         self.view_scale = view_scale
         self.mask_shape = mask_shape
+        self.image_atlas: torch.Tensor | None = None
+        if pattern == "image_atlas":
+            if not image_path:
+                raise ValueError("image_path is required for the image_atlas pattern")
+            with Image.open(image_path) as image:
+                array = np.asarray(image.convert("RGB"), dtype=np.float32).copy() / 255.0
+            self.image_atlas = torch.from_numpy(array).permute(2, 0, 1).contiguous()
         generator = torch.Generator().manual_seed(seed)
         if view_scale < 1.0:
             self.offsets = torch.rand(num_views, 2, generator=generator) * (1.0 - view_scale)
@@ -59,8 +70,10 @@ class SyntheticNeuralTextureDataset(Dataset[dict[str, Any]]):
             ))
         elif self.pattern == "neon_mosaic":
             rgb = self._neon_mosaic(u, v)
-        else:
+        elif self.pattern == "voxel_atlas":
             rgb = self._voxel_atlas(u, v)
+        else:
+            rgb = self._sample_image_atlas(uv)
         if self.mask_shape == "ellipse":
             ellipse = ((xx - 0.5) / 0.49) ** 2 + ((yy - 0.5) / 0.43) ** 2 <= 1.0
             mask = ellipse.float().unsqueeze(0)
@@ -68,6 +81,20 @@ class SyntheticNeuralTextureDataset(Dataset[dict[str, Any]]):
         else:
             mask = torch.ones(1, self.height, self.width)
         return {"rgb": rgb.float(), "uv": uv.float(), "mask": mask, "name": f"synthetic_{index:04d}"}
+
+    def _sample_image_atlas(self, uv: torch.Tensor) -> torch.Tensor:
+        """Bilinearly sample a project image using the same normalized UV convention."""
+        if self.image_atlas is None:
+            raise RuntimeError("image atlas was not loaded")
+        grid = uv.mul(2.0).sub(1.0).unsqueeze(0)
+        sampled = F.grid_sample(
+            self.image_atlas.unsqueeze(0),
+            grid,
+            mode="bilinear",
+            padding_mode="border",
+            align_corners=True,
+        )
+        return sampled.squeeze(0)
 
     @staticmethod
     def _neon_mosaic(u: torch.Tensor, v: torch.Tensor) -> torch.Tensor:

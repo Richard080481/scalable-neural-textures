@@ -1,0 +1,35 @@
+seed: 27
+device: auto
+data:
+  type: synthetic
+  num_train_views: 128
+  num_val_views: 16
+  image_height: 320
+  image_width: 320
+  synthetic_pattern: image_atlas
+  synthetic_image: assets/usc_inspired_atlas.png
+  view_scale: 0.42
+  mask_shape: full
+model:
+  texture_height: 1024
+  texture_width: 1024
+  texture_channels: 16
+  renderer_width: 64
+  renderer_depth: 4
+  include_mask: true
+  align_corners: true
+training:
+  global_batch_size: 4
+  gradient_accumulation_steps: 1
+  ddp_sync_each_microstep: false
+  learning_rate: 0.001
+  steps: 1200
+  warmup_steps: 40
+  log_every: 20
+  checkpoint_every: 300
+  render_every: 30
+  visibility_every: 20
+  num_workers: 4
+  mixed_precision: true
+profiling:
+  enabled: false

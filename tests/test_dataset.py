@@ -44,6 +44,25 @@ def test_voxel_atlas_is_bounded_and_spatially_varied():
     assert float(sample["rgb"].std()) > 0.12
 
 
+def test_image_atlas_samples_project_image(tmp_path):
+    source = np.zeros((8, 8, 3), dtype=np.uint8)
+    source[..., 0] = np.arange(8, dtype=np.uint8)[None, :] * 32
+    source[..., 1] = np.arange(8, dtype=np.uint8)[:, None] * 32
+    path = tmp_path / "atlas.png"
+    Image.fromarray(source).save(path)
+    sample = SyntheticNeuralTextureDataset(
+        num_views=1,
+        height=8,
+        width=8,
+        pattern="image_atlas",
+        image_path=str(path),
+        view_scale=0.5,
+    )[0]
+    assert sample["rgb"].shape == (3, 8, 8)
+    assert float(sample["rgb"].std()) > 0.05
+    assert torch.all((sample["rgb"] >= 0) & (sample["rgb"] <= 1))
+
+
 def test_directory_dataset_loads_and_can_flip_v(tmp_path):
     for folder in ("rgb", "uv", "mask"):
         (tmp_path / "train" / folder).mkdir(parents=True)

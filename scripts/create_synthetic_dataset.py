@@ -21,13 +21,14 @@ def write_split(
     pattern: str,
     view_scale: float,
     mask_shape: str,
+    image_path: str | None,
 ) -> None:
     target = root / split
     for folder in ("rgb", "uv", "mask"):
         (target / folder).mkdir(parents=True, exist_ok=True)
     dataset = SyntheticNeuralTextureDataset(
         views, height, width, seed,
-        pattern=pattern, view_scale=view_scale, mask_shape=mask_shape,
+        pattern=pattern, view_scale=view_scale, mask_shape=mask_shape, image_path=image_path,
     )
     for index, sample in enumerate(dataset):
         name = f"{index:04d}"
@@ -46,17 +47,22 @@ def main() -> None:
     parser.add_argument("--height", type=int, default=64)
     parser.add_argument("--width", type=int, default=64)
     parser.add_argument("--seed", type=int, default=7)
-    parser.add_argument("--pattern", choices=("gradient", "neon_mosaic", "voxel_atlas"), default="gradient")
+    parser.add_argument(
+        "--pattern",
+        choices=("gradient", "neon_mosaic", "voxel_atlas", "image_atlas"),
+        default="gradient",
+    )
+    parser.add_argument("--image-path")
     parser.add_argument("--view-scale", type=float, default=1.0)
     parser.add_argument("--mask-shape", choices=("full", "ellipse"), default="full")
     args = parser.parse_args()
     write_split(
         args.output_dir, "train", args.train_views, args.height, args.width, args.seed,
-        args.pattern, args.view_scale, args.mask_shape,
+        args.pattern, args.view_scale, args.mask_shape, args.image_path,
     )
     write_split(
         args.output_dir, "val", args.val_views, args.height, args.width, args.seed + 10_000,
-        args.pattern, args.view_scale, args.mask_shape,
+        args.pattern, args.view_scale, args.mask_shape, args.image_path,
     )
 
 

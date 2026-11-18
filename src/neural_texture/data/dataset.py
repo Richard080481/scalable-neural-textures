@@ -73,6 +73,7 @@ def create_dataset(config: dict[str, Any], split: str) -> Dataset[dict[str, Any]
             pattern=data["synthetic_pattern"],
             view_scale=float(data["view_scale"]),
             mask_shape=data["mask_shape"],
+            image_path=data.get("synthetic_image"),
         )
     if not data.get("root"):
         raise ValueError("data.root is required when data.type is 'directory'.")

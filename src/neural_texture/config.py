@@ -20,6 +20,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "image_height": 32,
         "image_width": 32,
         "synthetic_pattern": "gradient",
+        "synthetic_image": None,
         "view_scale": 1.0,
         "mask_shape": "full",
         "v_flip": False,
@@ -102,10 +103,17 @@ def validate_config(config: dict[str, Any]) -> None:
             raise ValueError(f"{name} must be a positive integer, got {value!r}")
     if config["data"]["type"] not in {"synthetic", "directory"}:
         raise ValueError("data.type must be 'synthetic' or 'directory'.")
-    if config["data"]["synthetic_pattern"] not in {"gradient", "neon_mosaic", "voxel_atlas"}:
+    if config["data"]["synthetic_pattern"] not in {
+        "gradient", "neon_mosaic", "voxel_atlas", "image_atlas"
+    }:
         raise ValueError(
-            "data.synthetic_pattern must be 'gradient', 'neon_mosaic', or 'voxel_atlas'."
+            "data.synthetic_pattern must be 'gradient', 'neon_mosaic', 'voxel_atlas', "
+            "or 'image_atlas'."
         )
+    if config["data"]["synthetic_pattern"] == "image_atlas":
+        image_path = config["data"].get("synthetic_image")
+        if not isinstance(image_path, str) or not Path(image_path).is_file():
+            raise ValueError("data.synthetic_image must name an existing image_atlas file.")
     view_scale = config["data"]["view_scale"]
     if not isinstance(view_scale, (int, float)) or not 0 < view_scale <= 1:
         raise ValueError("data.view_scale must be in (0, 1].")

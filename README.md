@@ -102,6 +102,22 @@ sbatch slurm/showcase_1gpu_carc.sbatch
 The presentation artifact is written to
 `outputs/showcase_*/renders/training_progress.gif`.
 
+## USC-inspired high-resolution showcase
+
+`configs/usc_showcase.yaml` uses a 1254x1254 original image atlas containing
+four cardinal-and-gold subjects: readable USC lettering, a Trojan helmet,
+Romanesque campus architecture, and a Southern California palm sunset. The
+model learns a 1024x1024x16 neural texture from randomized local UV views, so
+the progress GIF exposes both coarse reconstruction and fine-detail learning.
+The artwork is an unofficial project illustration, not an official USC mark.
+
+```bash
+sbatch slurm/usc_showcase_1gpu_carc.sbatch
+```
+
+The source target is `assets/usc_inspired_atlas.png`; the training animation is
+written to `outputs/usc_showcase_1gpu_*/renders/training_progress.gif`.
+
 ## USC CARC
 
 CARC environment setup and 1-, 2-, and two-node 4-GPU Slurm templates are in
