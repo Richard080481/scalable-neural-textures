@@ -8,7 +8,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --gpus-per-node=a40:2
 #SBATCH --mem=64G
-#SBATCH --time=02:00:00
+#SBATCH --time=00:30:00
 #SBATCH --output=outputs/slurm-%x-%j.out
 
 set -euo pipefail
