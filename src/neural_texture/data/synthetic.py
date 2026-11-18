@@ -90,6 +90,9 @@ class SyntheticNeuralTextureDataset(Dataset[dict[str, Any]]):
     @staticmethod
     def _voxel_atlas(u: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
         """An original block-game atlas: brick, leaves, grass/dirt, and stone."""
+        # Keep the inclusive UV endpoint from wrapping back to the first tile cell.
+        u = u.clamp(0.0, 1.0 - 1e-6)
+        v = v.clamp(0.0, 1.0 - 1e-6)
         local_u = torch.remainder(u * 2.0, 1.0)
         local_v = torch.remainder(v * 2.0, 1.0)
         cell_x = torch.floor(local_u * 16.0)
