@@ -26,7 +26,7 @@ training:
   steps: 1200
   warmup_steps: 40
   log_every: 20
-  checkpoint_every: 300
+  checkpoint_every: 600
   render_every: 30
   visibility_every: 20
   num_workers: 4
