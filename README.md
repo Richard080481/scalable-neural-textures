@@ -80,6 +80,28 @@ For the communication optimization, compare
 `configs/accumulation_baseline.yaml` with `configs/optimized.yaml`. Both have
 identical effective workloads; only the former synchronizes every microstep.
 
+## Voxel texture showcase
+
+`configs/showcase.yaml` trains the same neural-texture architecture on an
+original block-game atlas with staggered brick, clustered leaves, grass/dirt,
+and cobblestone tiles. Each view observes a different local UV crop, making the
+training animation visually recognizable while retaining exact reproducibility.
+It does not copy assets from Minecraft or another commercial game.
+
+```bash
+python -m neural_texture.train \
+  --config configs/showcase.yaml --output-dir outputs/showcase
+```
+
+On USC CARC:
+
+```bash
+sbatch slurm/showcase_1gpu_carc.sbatch
+```
+
+The presentation artifact is written to
+`outputs/showcase_*/renders/training_progress.gif`.
+
 ## USC CARC
 
 CARC environment setup and 1-, 2-, and two-node 4-GPU Slurm templates are in

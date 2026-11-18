@@ -19,6 +19,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "num_val_views": 2,
         "image_height": 32,
         "image_width": 32,
+        "synthetic_pattern": "gradient",
+        "view_scale": 1.0,
+        "mask_shape": "full",
         "v_flip": False,
     },
     "model": {
@@ -99,6 +102,15 @@ def validate_config(config: dict[str, Any]) -> None:
             raise ValueError(f"{name} must be a positive integer, got {value!r}")
     if config["data"]["type"] not in {"synthetic", "directory"}:
         raise ValueError("data.type must be 'synthetic' or 'directory'.")
+    if config["data"]["synthetic_pattern"] not in {"gradient", "neon_mosaic", "voxel_atlas"}:
+        raise ValueError(
+            "data.synthetic_pattern must be 'gradient', 'neon_mosaic', or 'voxel_atlas'."
+        )
+    view_scale = config["data"]["view_scale"]
+    if not isinstance(view_scale, (int, float)) or not 0 < view_scale <= 1:
+        raise ValueError("data.view_scale must be in (0, 1].")
+    if config["data"]["mask_shape"] not in {"full", "ellipse"}:
+        raise ValueError("data.mask_shape must be 'full' or 'ellipse'.")
     global_batch = config["training"].get("global_batch_size")
     if global_batch is not None and (not isinstance(global_batch, int) or global_batch <= 0):
         raise ValueError("training.global_batch_size must be null or a positive integer.")

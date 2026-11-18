@@ -1,0 +1,34 @@
+seed: 23
+device: auto
+data:
+  type: synthetic
+  num_train_views: 96
+  num_val_views: 12
+  image_height: 256
+  image_width: 256
+  synthetic_pattern: voxel_atlas
+  view_scale: 0.48
+  mask_shape: full
+model:
+  texture_height: 512
+  texture_width: 512
+  texture_channels: 16
+  renderer_width: 48
+  renderer_depth: 4
+  include_mask: true
+  align_corners: true
+training:
+  global_batch_size: 8
+  gradient_accumulation_steps: 1
+  ddp_sync_each_microstep: false
+  learning_rate: 0.0015
+  steps: 800
+  warmup_steps: 25
+  log_every: 20
+  checkpoint_every: 200
+  render_every: 25
+  visibility_every: 20
+  num_workers: 4
+  mixed_precision: true
+profiling:
+  enabled: false

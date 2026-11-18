@@ -14,6 +14,36 @@ def test_synthetic_dataset_shapes_and_ranges():
     assert torch.all((sample["uv"] >= 0) & (sample["uv"] <= 1))
 
 
+def test_neon_mosaic_partial_view_and_ellipse_mask():
+    sample = SyntheticNeuralTextureDataset(
+        num_views=2,
+        height=32,
+        width=40,
+        seed=11,
+        pattern="neon_mosaic",
+        view_scale=0.6,
+        mask_shape="ellipse",
+    )[0]
+    assert sample["rgb"].shape == (3, 32, 40)
+    assert float(sample["uv"][..., 0].max() - sample["uv"][..., 0].min()) == pytest.approx(0.6)
+    assert sample["mask"].min() == 0
+    assert sample["mask"].max() == 1
+    assert torch.all((sample["rgb"] >= 0) & (sample["rgb"] <= 1))
+
+
+def test_voxel_atlas_is_bounded_and_spatially_varied():
+    sample = SyntheticNeuralTextureDataset(
+        num_views=1,
+        height=64,
+        width=64,
+        seed=4,
+        pattern="voxel_atlas",
+        view_scale=1.0,
+    )[0]
+    assert torch.all((sample["rgb"] >= 0) & (sample["rgb"] <= 1))
+    assert float(sample["rgb"].std()) > 0.12
+
+
 def test_directory_dataset_loads_and_can_flip_v(tmp_path):
     for folder in ("rgb", "uv", "mask"):
         (tmp_path / "train" / folder).mkdir(parents=True)

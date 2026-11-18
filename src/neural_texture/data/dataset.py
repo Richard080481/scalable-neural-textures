@@ -70,6 +70,9 @@ def create_dataset(config: dict[str, Any], split: str) -> Dataset[dict[str, Any]
             height=data["image_height"],
             width=data["image_width"],
             seed=config["seed"] + (0 if split == "train" else 10_000),
+            pattern=data["synthetic_pattern"],
+            view_scale=float(data["view_scale"]),
+            mask_shape=data["mask_shape"],
         )
     if not data.get("root"):
         raise ValueError("data.root is required when data.type is 'directory'.")
