@@ -15,6 +15,12 @@ means after the configured warm-up steps. Run at least three trials on the same
 GPU model, precision, and node topology; never combine unlike GPU models in one
 scaling curve.
 
+`configs/usc_scaling.yaml` repeats this protocol with the image-backed USC
+showcase workload: a 1024x1024x16 neural texture, 320x320 views, and a fixed
+global batch of four. Its 300 steps are intended for timing rather than the
+long-form showcase animation. Keep this config unchanged across 1, 2, and 4
+GPUs and report its results as a separate complex-texture scaling curve.
+
 The DDP communication timer is installed as an averaged all-reduce hook. Its
 duration is the exposed communication window from the first asynchronous bucket
 launch until a device synchronization after backward confirms completion.

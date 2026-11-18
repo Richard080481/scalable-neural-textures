@@ -118,6 +118,11 @@ sbatch slurm/usc_showcase_1gpu_carc.sbatch
 The source target is `assets/usc_inspired_atlas.png`; the training animation is
 written to `outputs/usc_showcase_1gpu_*/renders/training_progress.gif`.
 
+For a separate strong-scaling measurement of this complex target, use
+`configs/usc_scaling.yaml` unchanged on 1, 2, and 4 GPUs. It keeps the global
+batch fixed at four and uses a shorter 300-step timing run; do not mix these
+measurements with the simpler `configs/scaling.yaml` curve.
+
 ## USC CARC
 
 CARC environment setup and 1-, 2-, and two-node 4-GPU Slurm templates are in

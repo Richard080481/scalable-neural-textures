@@ -23,9 +23,11 @@ export NCCL_DEBUG=WARN
 export MASTER_ADDR
 MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export MASTER_PORT=$((20000 + SLURM_JOB_ID % 20000))
-export NT_OUTPUT="outputs/scaling_4gpu_${SLURM_JOB_ID}"
+: "${NT_OUTPUT_PREFIX:=scaling_4gpu}"
+export NT_OUTPUT="outputs/${NT_OUTPUT_PREFIX}_${SLURM_JOB_ID}"
 : "${NT_CONFIG:=configs/scaling.yaml}"
 export NT_CONFIG
+export NT_OUTPUT_PREFIX
 
 srun --label bash -c '
   torchrun \

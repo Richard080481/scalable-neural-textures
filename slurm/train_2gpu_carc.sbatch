@@ -21,7 +21,8 @@ export OMP_NUM_THREADS=$((SLURM_CPUS_PER_TASK / 2))
 export NCCL_DEBUG=WARN
 nvidia-smi
 : "${NT_CONFIG:=configs/scaling.yaml}"
+: "${NT_OUTPUT_PREFIX:=scaling_2gpu}"
 torchrun --standalone --nproc_per_node=2 \
   -m neural_texture.train --config "$NT_CONFIG" \
-  --output-dir "outputs/scaling_2gpu_${SLURM_JOB_ID}"
+  --output-dir "outputs/${NT_OUTPUT_PREFIX}_${SLURM_JOB_ID}"
 

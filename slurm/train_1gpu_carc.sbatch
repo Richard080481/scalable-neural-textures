@@ -23,7 +23,8 @@ conda activate "$NT_ENV"
 cd "$SLURM_SUBMIT_DIR"
 nvidia-smi
 : "${NT_CONFIG:=configs/scaling.yaml}"
+: "${NT_OUTPUT_PREFIX:=scaling_1gpu}"
 torchrun --standalone --nproc_per_node=1 -m neural_texture.train \
   --config "$NT_CONFIG" \
-  --output-dir "outputs/scaling_1gpu_${SLURM_JOB_ID}"
+  --output-dir "outputs/${NT_OUTPUT_PREFIX}_${SLURM_JOB_ID}"
 
