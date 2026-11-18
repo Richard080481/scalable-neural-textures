@@ -12,6 +12,9 @@
 #SBATCH --output=outputs/slurm-%x-%j.out
 
 set -euo pipefail
+if ! command -v module >/dev/null 2>&1; then
+  source /etc/profile.d/modules.sh
+fi
 module purge
 module load conda
 : "${NT_ENV:=$HOME/.conda/envs/scalable-neural-textures}"

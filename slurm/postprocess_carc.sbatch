@@ -11,6 +11,9 @@
 #SBATCH --output=outputs/slurm-%x-%j.out
 
 set -euo pipefail
+if ! command -v module >/dev/null 2>&1; then
+  source /etc/profile.d/modules.sh
+fi
 module purge
 module load conda
 eval "$(conda shell.bash hook)"
