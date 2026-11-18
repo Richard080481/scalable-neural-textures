@@ -21,6 +21,14 @@ global batch of four. Its 300 steps are intended for timing rather than the
 long-form showcase animation. Keep this config unchanged across 1, 2, and 4
 GPUs and report its results as a separate complex-texture scaling curve.
 
+`configs/usc_speed_optimized.yaml` keeps that workload identical while enabling
+fused Adam, channels-last convolutions, cuDNN autotuning, scheduled visibility
+work, and throughput timing with one end-of-step synchronization. Compare it
+against `usc_scaling.yaml` using end-to-end step time, throughput, peak memory,
+and validation PSNR. Per-phase and communication timings are intentionally not
+reported in throughput mode; separate instrumentation from the quantity being
+optimized.
+
 The DDP communication timer is installed as an averaged all-reduce hook. Its
 duration is the exposed communication window from the first asynchronous bucket
 launch until a device synchronization after backward confirms completion.

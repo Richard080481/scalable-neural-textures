@@ -33,6 +33,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "renderer_depth": 3,
         "include_mask": True,
         "align_corners": True,
+        "channels_last": False,
     },
     "training": {
         "batch_size": 2,
@@ -48,6 +49,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "visibility_every": 10,
         "num_workers": 0,
         "mixed_precision": False,
+        "fused_optimizer": False,
+        "synchronize_each_phase": True,
+        "measure_communication": True,
+        "cudnn_benchmark": False,
         "resume": None,
     },
     "profiling": {
@@ -124,6 +129,17 @@ def validate_config(config: dict[str, Any]) -> None:
         raise ValueError("training.global_batch_size must be null or a positive integer.")
     if not isinstance(config["training"]["ddp_sync_each_microstep"], bool):
         raise ValueError("training.ddp_sync_each_microstep must be boolean.")
+    for key in (
+        "fused_optimizer", "synchronize_each_phase", "measure_communication", "cudnn_benchmark"
+    ):
+        if not isinstance(config["training"][key], bool):
+            raise ValueError(f"training.{key} must be boolean.")
+    if not isinstance(config["model"]["channels_last"], bool):
+        raise ValueError("model.channels_last must be boolean.")
+    if config["training"]["measure_communication"] and not config["training"]["synchronize_each_phase"]:
+        raise ValueError(
+            "training.measure_communication requires synchronize_each_phase for accurate timing."
+        )
 
 
 def save_config(config: dict[str, Any], path: str | Path) -> None:

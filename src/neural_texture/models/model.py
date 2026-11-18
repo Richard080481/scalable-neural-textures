@@ -19,11 +19,15 @@ class NeuralTextureModel(nn.Module):
         renderer_depth: int = 3,
         include_mask: bool = True,
         align_corners: bool = True,
+        channels_last: bool = False,
     ):
         super().__init__()
         self.include_mask = include_mask
+        self.channels_last = channels_last
         self.neural_texture = NeuralTexture(texture_channels, texture_height, texture_width, align_corners)
         self.renderer = NeuralRenderer(texture_channels + int(include_mask), renderer_width, renderer_depth)
+        if channels_last:
+            self.renderer.to(memory_format=torch.channels_last)
 
     @classmethod
     def from_config(cls, config: dict) -> "NeuralTextureModel":
@@ -36,5 +40,7 @@ class NeuralTextureModel(nn.Module):
             if mask is None:
                 raise ValueError("A mask is required when include_mask is enabled.")
             features = torch.cat((features, mask), dim=1)
+        if self.channels_last:
+            features = features.contiguous(memory_format=torch.channels_last)
         return self.renderer(features)
 

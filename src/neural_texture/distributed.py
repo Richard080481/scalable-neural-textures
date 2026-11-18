@@ -67,6 +67,15 @@ def reduce_mean(value: torch.Tensor, context: DistributedContext) -> torch.Tenso
     return result
 
 
+def reduce_mean_values(values: torch.Tensor, context: DistributedContext) -> torch.Tensor:
+    """Average several scalar metrics with one collective instead of one per value."""
+    result = values.detach().clone()
+    if context.distributed:
+        dist.all_reduce(result, op=dist.ReduceOp.SUM)
+        result.div_(context.world_size)
+    return result
+
+
 def unwrap_model(model: nn.Module) -> nn.Module:
     return model.module if isinstance(model, DistributedDataParallel) else model
 

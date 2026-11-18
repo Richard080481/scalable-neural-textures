@@ -123,6 +123,14 @@ For a separate strong-scaling measurement of this complex target, use
 batch fixed at four and uses a shorter 300-step timing run; do not mix these
 measurements with the simpler `configs/scaling.yaml` curve.
 
+`configs/usc_speed_optimized.yaml` tests an actual acceleration path rather
+than merely diagnosing communication: fused Adam, channels-last convolutions,
+cuDNN autotuning, scheduled visibility work, one collective for scalar metrics,
+and removal of phase-by-phase GPU synchronization. It preserves the model,
+samples, global batch, step count, and validation contract. Compare end-to-end
+step time, wall time, throughput, peak memory, and validation PSNR against
+`configs/usc_scaling.yaml` at each GPU count.
+
 ## USC CARC
 
 CARC environment setup and 1-, 2-, and two-node 4-GPU Slurm templates are in

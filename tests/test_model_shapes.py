@@ -16,3 +16,14 @@ def test_model_output_shape_and_gradients_reach_both_components():
     assert all(gradient is not None for gradient in renderer_grads)
     assert sum(gradient.abs().sum() for gradient in renderer_grads) > 0
 
+
+def test_channels_last_model_preserves_output_contract():
+    model = NeuralTextureModel(
+        4, 8, 8, renderer_width=8, renderer_depth=2, channels_last=True
+    )
+    uv = torch.rand(2, 6, 5, 2)
+    mask = torch.ones(2, 1, 6, 5)
+    output = model(uv, mask)
+    assert output.shape == (2, 3, 6, 5)
+    assert output.is_contiguous(memory_format=torch.channels_last)
+

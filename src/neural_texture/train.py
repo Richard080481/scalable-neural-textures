@@ -21,7 +21,7 @@ from .distributed import (
     TimingAllReduceState,
     cleanup_distributed,
     initialize_distributed,
-    reduce_mean,
+    reduce_mean_values,
     synchronize,
     timing_allreduce_hook,
 )
@@ -158,8 +158,16 @@ def train(config: dict[str, Any], output_dir: str | Path) -> dict[str, Any]:
             pin_memory=device.type == "cuda",
             generator=torch.Generator().manual_seed(config["seed"] + context.rank),
         )
+        torch.backends.cudnn.benchmark = bool(
+            config["training"]["cudnn_benchmark"] and device.type == "cuda"
+        )
         raw_model = NeuralTextureModel.from_config(config).to(device)
-        optimizer = torch.optim.Adam(raw_model.parameters(), lr=config["training"]["learning_rate"])
+        use_fused_optimizer = bool(config["training"]["fused_optimizer"] and device.type == "cuda")
+        optimizer = torch.optim.Adam(
+            raw_model.parameters(),
+            lr=config["training"]["learning_rate"],
+            fused=use_fused_optimizer,
+        )
         start_step = 0
         if config["training"].get("resume"):
             state = load_checkpoint(config["training"]["resume"], raw_model, optimizer, device)
@@ -173,8 +181,9 @@ def train(config: dict[str, Any], output_dir: str | Path) -> dict[str, Any]:
                 device_ids=[context.local_rank] if device.type == "cuda" else None,
                 output_device=context.local_rank if device.type == "cuda" else None,
             )
-            communication_state = TimingAllReduceState(dist.group.WORLD, context.world_size)
-            model.register_comm_hook(communication_state, timing_allreduce_hook)
+            if config["training"]["measure_communication"]:
+                communication_state = TimingAllReduceState(dist.group.WORLD, context.world_size)
+                model.register_comm_hook(communication_state, timing_allreduce_hook)
 
         use_amp = bool(config["training"]["mixed_precision"] and device.type == "cuda")
         scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
@@ -225,11 +234,15 @@ def train(config: dict[str, Any], output_dir: str | Path) -> dict[str, Any]:
             totals = {"data": 0.0, "forward": 0.0, "backward": 0.0}
             local_loss = torch.zeros((), device=device)
             local_psnr = torch.zeros((), device=device)
-            local_visible = torch.zeros(
-                config["model"]["texture_height"] * config["model"]["texture_width"],
-                dtype=torch.bool,
-                device=device,
-            )
+            visibility_every = config["training"]["visibility_every"]
+            measure_visibility = step == 1 or step % visibility_every == 0
+            local_visible = None
+            if measure_visibility:
+                local_visible = torch.zeros(
+                    config["model"]["texture_height"] * config["model"]["texture_width"],
+                    dtype=torch.bool,
+                    device=device,
+                )
 
             for micro_step in range(accumulation):
                 data_started = time.perf_counter()
@@ -243,11 +256,13 @@ def train(config: dict[str, Any], output_dir: str | Path) -> dict[str, Any]:
                 rgb = batch["rgb"].to(device, non_blocking=True)
                 uv = batch["uv"].to(device, non_blocking=True)
                 mask = batch["mask"].to(device, non_blocking=True)
-                synchronize(context)
+                if config["training"]["synchronize_each_phase"]:
+                    synchronize(context)
                 totals["data"] += time.perf_counter() - data_started
-                local_visible |= visible_texel_mask(
-                    uv, mask, config["model"]["texture_height"], config["model"]["texture_width"]
-                )
+                if local_visible is not None:
+                    local_visible |= visible_texel_mask(
+                        uv, mask, config["model"]["texture_height"], config["model"]["texture_width"]
+                    )
 
                 sync_gradients = (
                     config["training"]["ddp_sync_each_microstep"]
@@ -262,13 +277,15 @@ def train(config: dict[str, Any], output_dir: str | Path) -> dict[str, Any]:
                         prediction = model(uv, mask)
                         unscaled_loss = masked_l1(prediction, rgb, mask)
                         loss = unscaled_loss / accumulation
-                    synchronize(context)
+                    if config["training"]["synchronize_each_phase"]:
+                        synchronize(context)
                     totals["forward"] += time.perf_counter() - forward_started
                     local_loss += unscaled_loss.detach() / accumulation
                     local_psnr += masked_psnr(prediction.detach(), rgb, mask) / accumulation
                     backward_started = time.perf_counter()
                     scaler.scale(loss).backward()
-                synchronize(context)
+                if config["training"]["synchronize_each_phase"]:
+                    synchronize(context)
                 if communication_state is not None and sync_gradients:
                     communication_state.finish_window()
                 totals["backward"] += time.perf_counter() - backward_started
@@ -282,8 +299,8 @@ def train(config: dict[str, Any], output_dir: str | Path) -> dict[str, Any]:
             communication_elapsed = communication_state.elapsed_seconds if communication_state else 0.0
             communication_bytes = communication_state.bytes if communication_state else 0
 
-            loss_value = float(reduce_mean(local_loss, context))
-            psnr_value = float(reduce_mean(local_psnr, context))
+            reduced_metrics = reduce_mean_values(torch.stack((local_loss, local_psnr)), context)
+            loss_value, psnr_value = (float(value) for value in reduced_metrics)
             initial_loss = loss_value if initial_loss is None else initial_loss
             final_loss = loss_value
             timings = _max_across_ranks(
@@ -291,11 +308,14 @@ def train(config: dict[str, Any], output_dir: str | Path) -> dict[str, Any]:
                 context,
             )
             step_elapsed, data_elapsed, forward_elapsed, backward_elapsed, communication_elapsed, optimizer_elapsed = timings
+            if not config["training"]["synchronize_each_phase"]:
+                # Only end-to-end step timing is meaningful in throughput mode;
+                # phase launch times would otherwise be mistaken for GPU durations.
+                data_elapsed = forward_elapsed = backward_elapsed = optimizer_elapsed = 0.0
             visibility: dict[str, float | str] = {key: "" for key in (
                 "visible_texel_ratio_local", "visible_texel_ratio_global", "visible_texel_overlap_ratio"
             )}
-            visibility_every = config["training"]["visibility_every"]
-            if step == 1 or step % visibility_every == 0:
+            if local_visible is not None:
                 visibility = distributed_visibility(local_visible, context)
             allocated = torch.cuda.max_memory_allocated(device) / (1024 ** 2) if device.type == "cuda" else 0.0
             reserved = torch.cuda.max_memory_reserved(device) / (1024 ** 2) if device.type == "cuda" else 0.0
@@ -359,6 +379,12 @@ def train(config: dict[str, Any], output_dir: str | Path) -> dict[str, Any]:
                 "global_batch_size": global_batch, "micro_batch_size": micro_batch,
                 "gradient_accumulation_steps": accumulation,
                 "ddp_sync_each_microstep": config["training"]["ddp_sync_each_microstep"],
+                "synchronize_each_phase": config["training"]["synchronize_each_phase"],
+                "measure_communication": config["training"]["measure_communication"],
+                "fused_optimizer": use_fused_optimizer,
+                "channels_last": config["model"]["channels_last"],
+                "cudnn_benchmark": config["training"]["cudnn_benchmark"],
+                "phase_timings_available": config["training"]["synchronize_each_phase"],
                 "texture_parameters": texture_parameters,
                 "texture_gradient_bytes_fp32": texture_parameters * 4,
                 "initial_loss": initial_loss, "final_loss": final_loss,
