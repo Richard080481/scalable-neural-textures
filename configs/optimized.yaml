@@ -1,0 +1,31 @@
+# Same workload as accumulation_baseline.yaml, but DDP no_sync() communicates
+# only on the fourth microstep.
+seed: 7
+device: auto
+data:
+  type: synthetic
+  num_train_views: 64
+  num_val_views: 8
+  image_height: 128
+  image_width: 128
+model:
+  texture_height: 512
+  texture_width: 512
+  texture_channels: 16
+  renderer_width: 32
+  renderer_depth: 3
+  include_mask: true
+  align_corners: true
+training:
+  global_batch_size: 16
+  gradient_accumulation_steps: 4
+  ddp_sync_each_microstep: false
+  learning_rate: 0.001
+  steps: 500
+  warmup_steps: 25
+  log_every: 10
+  checkpoint_every: 100
+  render_every: 50
+  visibility_every: 10
+  num_workers: 4
+  mixed_precision: true

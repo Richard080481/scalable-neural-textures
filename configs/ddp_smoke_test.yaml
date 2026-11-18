@@ -1,0 +1,29 @@
+seed: 7
+device: auto
+data:
+  type: synthetic
+  num_train_views: 4
+  num_val_views: 1
+  image_height: 16
+  image_width: 16
+model:
+  texture_height: 16
+  texture_width: 16
+  texture_channels: 4
+  renderer_width: 8
+  renderer_depth: 2
+  include_mask: true
+  align_corners: true
+training:
+  global_batch_size: 4
+  gradient_accumulation_steps: 2
+  ddp_sync_each_microstep: false
+  learning_rate: 0.03
+  steps: 8
+  warmup_steps: 2
+  log_every: 2
+  checkpoint_every: 8
+  render_every: 4
+  visibility_every: 2
+  num_workers: 0
+  mixed_precision: false

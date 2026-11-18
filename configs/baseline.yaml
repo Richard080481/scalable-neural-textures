@@ -1,0 +1,28 @@
+seed: 7
+device: auto
+data:
+  type: synthetic
+  root: null
+  num_train_views: 8
+  num_val_views: 2
+  image_height: 128
+  image_width: 128
+  v_flip: false
+model:
+  texture_height: 512
+  texture_width: 512
+  texture_channels: 16
+  renderer_width: 32
+  renderer_depth: 3
+  include_mask: true
+  align_corners: true
+training:
+  batch_size: 2
+  learning_rate: 0.001
+  steps: 1000
+  log_every: 10
+  checkpoint_every: 100
+  num_workers: 2
+  mixed_precision: true
+  resume: null
+
