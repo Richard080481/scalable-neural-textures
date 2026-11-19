@@ -53,6 +53,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "synchronize_each_phase": True,
         "measure_communication": True,
         "cudnn_benchmark": False,
+        "visual_indices": [0],
+        "visual_labels": None,
         "resume": None,
     },
     "profiling": {
@@ -140,6 +142,24 @@ def validate_config(config: dict[str, Any]) -> None:
         raise ValueError(
             "training.measure_communication requires synchronize_each_phase for accurate timing."
         )
+    visual_indices = config["training"]["visual_indices"]
+    if (
+        not isinstance(visual_indices, list)
+        or not visual_indices
+        or any(not isinstance(index, int) or index < 0 for index in visual_indices)
+    ):
+        raise ValueError("training.visual_indices must be a non-empty list of non-negative integers.")
+    labels = config["training"].get("visual_labels")
+    if labels is not None:
+        if not isinstance(labels, list) or len(labels) != len(visual_indices):
+            raise ValueError("training.visual_labels must match training.visual_indices in length.")
+        if any(
+            not isinstance(label, str)
+            or not label
+            or any(not (character.isalnum() or character in "_-") for character in label)
+            for label in labels
+        ):
+            raise ValueError("training.visual_labels may contain only letters, numbers, '_' and '-'.")
 
 
 def save_config(config: dict[str, Any], path: str | Path) -> None:

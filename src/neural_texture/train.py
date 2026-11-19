@@ -190,11 +190,25 @@ def train(config: dict[str, Any], output_dir: str | Path) -> dict[str, Any]:
         if context.is_main:
             logger = CSVLogger(output / "metrics.csv", METRIC_FIELDS)
 
-        visual_batch = None
+        visual_batches: list[tuple[str, dict[str, Any]]] = []
         if context.is_main:
-            visual_batch = next(iter(DataLoader(dataset, batch_size=1, shuffle=False)))
-            visual_batch = {key: value.to(device) if torch.is_tensor(value) else value for key, value in visual_batch.items()}
-            save_progress_frame(raw_model, visual_batch["uv"], visual_batch["mask"], visual_batch["rgb"], start_step, output / "renders")
+            visual_indices = config["training"]["visual_indices"]
+            labels = config["training"].get("visual_labels")
+            for position, index in enumerate(visual_indices):
+                if index >= len(dataset):
+                    raise ValueError(f"visual index {index} exceeds dataset length {len(dataset)}")
+                batch = next(iter(DataLoader(Subset(dataset, [index]), batch_size=1, shuffle=False)))
+                batch = {
+                    key: value.to(device) if torch.is_tensor(value) else value
+                    for key, value in batch.items()
+                }
+                label = labels[position] if labels is not None else f"view_{index:04d}"
+                visual_batches.append((label, batch))
+            for label, batch in visual_batches:
+                frame_dir = output / "renders" if len(visual_batches) == 1 else output / "renders" / label
+                save_progress_frame(
+                    raw_model, batch["uv"], batch["mask"], batch["rgb"], start_step, frame_dir
+                )
 
         epoch = 0
         sampler.set_epoch(epoch)
@@ -341,8 +355,12 @@ def train(config: dict[str, Any], output_dir: str | Path) -> dict[str, Any]:
                         f"psnr={psnr_value:.2f} throughput={row['samples_per_second']:.1f} samples/s "
                         f"comm_ms={row['communication_time_ms']:.2f}"
                     )
-                if visual_batch is not None and (step % config["training"]["render_every"] == 0 or step == config["training"]["steps"]):
-                    save_progress_frame(raw_model, visual_batch["uv"], visual_batch["mask"], visual_batch["rgb"], step, output / "renders")
+                if visual_batches and (step % config["training"]["render_every"] == 0 or step == config["training"]["steps"]):
+                    for label, batch in visual_batches:
+                        frame_dir = output / "renders" if len(visual_batches) == 1 else output / "renders" / label
+                        save_progress_frame(
+                            raw_model, batch["uv"], batch["mask"], batch["rgb"], step, frame_dir
+                        )
                 interval = config["training"]["checkpoint_every"]
                 if step % interval == 0 or step == config["training"]["steps"]:
                     save_checkpoint(output / "checkpoints" / f"step_{step:06d}.pt", raw_model, optimizer, step)
@@ -361,7 +379,12 @@ def train(config: dict[str, Any], output_dir: str | Path) -> dict[str, Any]:
             assert logger is not None
             logger.close()
             logger = None
-            create_progress_gif(output / "renders", output / "renders" / "training_progress.gif")
+            if len(visual_batches) == 1:
+                create_progress_gif(output / "renders", output / "renders" / "training_progress.gif")
+            else:
+                for label, _ in visual_batches:
+                    frame_dir = output / "renders" / label
+                    create_progress_gif(frame_dir, frame_dir / "training_progress.gif")
             warmup = config["training"]["warmup_steps"]
             timed_rows = [row for row in rows if int(row["step"]) > warmup] or rows
             texture_parameters = (
