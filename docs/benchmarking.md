@@ -29,6 +29,16 @@ and validation PSNR. Per-phase and communication timings are intentionally not
 reported in throughput mode; separate instrumentation from the quantity being
 optimized.
 
+## Compute-heavy strong scaling
+
+`configs/usc_large_batch_scaling.yaml` is the positive-scaling experiment. It
+fixes the global batch at 64 and uses four accumulation microsteps with
+`no_sync()`, giving per-rank micro-batches of 16, 8, and 4 on 1, 2, and 4 GPUs.
+The total samples and optimizer updates remain identical, while each GPU has
+enough convolution work to amortize the single gradient synchronization per
+step. Report both speedup and parallel efficiency; do not compare its absolute
+throughput directly with the global-batch-four experiment.
+
 The DDP communication timer is installed as an averaged all-reduce hook. Its
 duration is the exposed communication window from the first asynchronous bucket
 launch until a device synchronization after backward confirms completion.

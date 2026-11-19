@@ -131,6 +131,13 @@ samples, global batch, step count, and validation contract. Compare end-to-end
 step time, wall time, throughput, peak memory, and validation PSNR against
 `configs/usc_scaling.yaml` at each GPU count.
 
+To test whether additional GPUs become beneficial when computation is large
+enough, `configs/usc_large_batch_scaling.yaml` performs a fixed-global-batch-64
+strong-scaling run. Four `no_sync()` accumulation microsteps keep memory
+bounded and communicate gradients only once per optimizer step. This is the
+appropriate experiment for demonstrating positive multi-GPU scaling without
+changing the total workload.
+
 ## USC CARC
 
 CARC environment setup and 1-, 2-, and two-node 4-GPU Slurm templates are in
