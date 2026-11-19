@@ -56,11 +56,22 @@ class SyntheticNeuralTextureDataset(Dataset[dict[str, Any]]):
         return self.num_views
 
     def __getitem__(self, index: int) -> dict[str, Any]:
+        return self._sample_at_offset(self.offsets[index], f"synthetic_{index:04d}")
+
+    def sample_at_offset(self, offset: tuple[float, float], name: str) -> dict[str, Any]:
+        """Render a deterministic presentation view at an explicit UV offset."""
+        offset_tensor = torch.tensor(offset, dtype=torch.float32)
+        maximum = 1.0 - self.view_scale
+        if offset_tensor.shape != (2,) or torch.any(offset_tensor < 0) or torch.any(offset_tensor > maximum):
+            raise ValueError(f"offset must contain two values in [0, {maximum}]")
+        return self._sample_at_offset(offset_tensor, name)
+
+    def _sample_at_offset(self, offset: torch.Tensor, name: str) -> dict[str, Any]:
         y = torch.linspace(0.0, 1.0, self.height)
         x = torch.linspace(0.0, 1.0, self.width)
         yy, xx = torch.meshgrid(y, x, indexing="ij")
         uv = torch.stack((xx, yy), dim=-1)
-        uv = (uv * self.view_scale + self.offsets[index]).clamp(0.0, 1.0)
+        uv = (uv * self.view_scale + offset).clamp(0.0, 1.0)
         u, v = uv[..., 0], uv[..., 1]
         if self.pattern == "gradient":
             rgb = torch.stack((
@@ -80,7 +91,7 @@ class SyntheticNeuralTextureDataset(Dataset[dict[str, Any]]):
             rgb = rgb * mask
         else:
             mask = torch.ones(1, self.height, self.width)
-        return {"rgb": rgb.float(), "uv": uv.float(), "mask": mask, "name": f"synthetic_{index:04d}"}
+        return {"rgb": rgb.float(), "uv": uv.float(), "mask": mask, "name": name}
 
     def _sample_image_atlas(self, uv: torch.Tensor) -> torch.Tensor:
         """Bilinearly sample a project image using the same normalized UV convention."""

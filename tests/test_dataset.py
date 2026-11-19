@@ -44,6 +44,17 @@ def test_voxel_atlas_is_bounded_and_spatially_varied():
     assert float(sample["rgb"].std()) > 0.12
 
 
+def test_explicit_visual_offset_has_exact_uv_extent():
+    dataset = SyntheticNeuralTextureDataset(
+        num_views=1, height=16, width=16, pattern="voxel_atlas", view_scale=0.48
+    )
+    sample = dataset.sample_at_offset((0.51, 0.01), "leaves")
+    assert float(sample["uv"][..., 0].min()) == pytest.approx(0.51)
+    assert float(sample["uv"][..., 0].max()) == pytest.approx(0.99)
+    assert float(sample["uv"][..., 1].min()) == pytest.approx(0.01)
+    assert float(sample["uv"][..., 1].max()) == pytest.approx(0.49)
+
+
 def test_image_atlas_samples_project_image(tmp_path):
     source = np.zeros((8, 8, 3), dtype=np.uint8)
     source[..., 0] = np.arange(8, dtype=np.uint8)[None, :] * 32

@@ -99,8 +99,8 @@ On USC CARC:
 sbatch slurm/showcase_1gpu_carc.sbatch
 ```
 
-The presentation artifact is written to
-`outputs/showcase_*/renders/training_progress.gif`.
+Four equally framed presentation artifacts are written under
+`outputs/showcase_*/renders/{brick,leaves,grass,stone}/training_progress.gif`.
 
 ## USC-inspired high-resolution showcase
 

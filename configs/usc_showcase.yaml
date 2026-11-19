@@ -31,7 +31,7 @@ training:
   visibility_every: 20
   num_workers: 4
   mixed_precision: true
-  visual_indices: [92, 0, 124, 125]
+  visual_offsets: [[0.04, 0.04], [0.54, 0.04], [0.04, 0.54], [0.54, 0.54]]
   visual_labels: [usc, trojan, campus, sunset]
 profiling:
   enabled: false

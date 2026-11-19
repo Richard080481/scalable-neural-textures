@@ -12,7 +12,7 @@ from typing import Any
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data import DataLoader, DistributedSampler, Subset
+from torch.utils.data import DataLoader, DistributedSampler, Subset, default_collate
 
 from .config import load_config, save_config
 from .data import create_dataset
@@ -193,16 +193,27 @@ def train(config: dict[str, Any], output_dir: str | Path) -> dict[str, Any]:
         visual_batches: list[tuple[str, dict[str, Any]]] = []
         if context.is_main:
             visual_indices = config["training"]["visual_indices"]
+            visual_offsets = config["training"].get("visual_offsets")
             labels = config["training"].get("visual_labels")
-            for position, index in enumerate(visual_indices):
-                if index >= len(dataset):
-                    raise ValueError(f"visual index {index} exceeds dataset length {len(dataset)}")
-                batch = next(iter(DataLoader(Subset(dataset, [index]), batch_size=1, shuffle=False)))
+            if visual_offsets is not None:
+                if not hasattr(dataset, "sample_at_offset"):
+                    raise ValueError("training.visual_offsets requires a synthetic dataset")
+                samples = [
+                    dataset.sample_at_offset(tuple(offset), f"visual_{position:04d}")
+                    for position, offset in enumerate(visual_offsets)
+                ]
+            else:
+                for index in visual_indices:
+                    if index >= len(dataset):
+                        raise ValueError(f"visual index {index} exceeds dataset length {len(dataset)}")
+                samples = [dataset[index] for index in visual_indices]
+            for position, sample in enumerate(samples):
+                batch = default_collate([sample])
                 batch = {
                     key: value.to(device) if torch.is_tensor(value) else value
                     for key, value in batch.items()
                 }
-                label = labels[position] if labels is not None else f"view_{index:04d}"
+                label = labels[position] if labels is not None else f"view_{position:04d}"
                 visual_batches.append((label, batch))
             for label, batch in visual_batches:
                 frame_dir = output / "renders" if len(visual_batches) == 1 else output / "renders" / label

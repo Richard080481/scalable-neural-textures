@@ -54,6 +54,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "measure_communication": True,
         "cudnn_benchmark": False,
         "visual_indices": [0],
+        "visual_offsets": None,
         "visual_labels": None,
         "resume": None,
     },
@@ -149,10 +150,24 @@ def validate_config(config: dict[str, Any]) -> None:
         or any(not isinstance(index, int) or index < 0 for index in visual_indices)
     ):
         raise ValueError("training.visual_indices must be a non-empty list of non-negative integers.")
+    visual_offsets = config["training"].get("visual_offsets")
+    if visual_offsets is not None:
+        if (
+            not isinstance(visual_offsets, list)
+            or not visual_offsets
+            or any(
+                not isinstance(offset, list)
+                or len(offset) != 2
+                or any(not isinstance(value, (int, float)) for value in offset)
+                for offset in visual_offsets
+            )
+        ):
+            raise ValueError("training.visual_offsets must be a non-empty list of [u, v] pairs.")
     labels = config["training"].get("visual_labels")
     if labels is not None:
-        if not isinstance(labels, list) or len(labels) != len(visual_indices):
-            raise ValueError("training.visual_labels must match training.visual_indices in length.")
+        visual_count = len(visual_offsets) if visual_offsets is not None else len(visual_indices)
+        if not isinstance(labels, list) or len(labels) != visual_count:
+            raise ValueError("training.visual_labels must match the selected visual views in length.")
         if any(
             not isinstance(label, str)
             or not label

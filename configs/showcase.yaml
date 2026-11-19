@@ -30,5 +30,7 @@ training:
   visibility_every: 20
   num_workers: 4
   mixed_precision: true
+  visual_offsets: [[0.01, 0.01], [0.51, 0.01], [0.01, 0.51], [0.51, 0.51]]
+  visual_labels: [brick, leaves, grass, stone]
 profiling:
   enabled: false
