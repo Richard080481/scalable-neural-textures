@@ -12,5 +12,6 @@ outputs/*
 *.pth
 *.npy
 *.tar.gz
+/results/carc_final_*/
 
 
