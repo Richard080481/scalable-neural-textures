@@ -21,6 +21,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "image_width": 32,
         "synthetic_pattern": "gradient",
         "synthetic_image": None,
+        "train_fixed_offsets": [],
         "view_scale": 1.0,
         "mask_shape": "full",
         "v_flip": False,
@@ -127,6 +128,22 @@ def validate_config(config: dict[str, Any]) -> None:
         raise ValueError("data.view_scale must be in (0, 1].")
     if config["data"]["mask_shape"] not in {"full", "ellipse"}:
         raise ValueError("data.mask_shape must be 'full' or 'ellipse'.")
+    fixed_offsets = config["data"].get("train_fixed_offsets")
+    if (
+        not isinstance(fixed_offsets, list)
+        or any(
+            not isinstance(offset, list)
+            or len(offset) != 2
+            or any(not isinstance(value, (int, float)) for value in offset)
+            for offset in fixed_offsets
+        )
+    ):
+        raise ValueError("data.train_fixed_offsets must be a list of [u, v] pairs.")
+    maximum_offset = 1.0 - float(config["data"]["view_scale"])
+    if any(value < 0 or value > maximum_offset for offset in fixed_offsets for value in offset):
+        raise ValueError(
+            f"data.train_fixed_offsets values must be in [0, {maximum_offset}]."
+        )
     global_batch = config["training"].get("global_batch_size")
     if global_batch is not None and (not isinstance(global_batch, int) or global_batch <= 0):
         raise ValueError("training.global_batch_size must be null or a positive integer.")

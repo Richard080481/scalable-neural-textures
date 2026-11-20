@@ -55,6 +55,22 @@ def test_explicit_visual_offset_has_exact_uv_extent():
     assert float(sample["uv"][..., 1].max()) == pytest.approx(0.49)
 
 
+def test_fixed_offsets_are_part_of_training_dataset():
+    fixed = [[0.01, 0.01], [0.51, 0.51]]
+    dataset = SyntheticNeuralTextureDataset(
+        num_views=4,
+        height=8,
+        width=8,
+        pattern="voxel_atlas",
+        view_scale=0.48,
+        fixed_offsets=fixed,
+    )
+    assert torch.allclose(dataset.offsets[:2], torch.tensor(fixed))
+    first = dataset[0]
+    assert float(first["uv"][..., 0].min()) == pytest.approx(0.01)
+    assert float(first["uv"][..., 1].min()) == pytest.approx(0.01)
+
+
 def test_image_atlas_samples_project_image(tmp_path):
     source = np.zeros((8, 8, 3), dtype=np.uint8)
     source[..., 0] = np.arange(8, dtype=np.uint8)[None, :] * 32

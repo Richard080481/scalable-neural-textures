@@ -74,6 +74,7 @@ def create_dataset(config: dict[str, Any], split: str) -> Dataset[dict[str, Any]
             view_scale=float(data["view_scale"]),
             mask_shape=data["mask_shape"],
             image_path=data.get("synthetic_image"),
+            fixed_offsets=data.get("train_fixed_offsets") if split == "train" else None,
         )
     if not data.get("root"):
         raise ValueError("data.root is required when data.type is 'directory'.")

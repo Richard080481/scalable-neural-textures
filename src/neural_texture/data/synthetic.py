@@ -24,6 +24,7 @@ class SyntheticNeuralTextureDataset(Dataset[dict[str, Any]]):
         view_scale: float = 1.0,
         mask_shape: str = "full",
         image_path: str | None = None,
+        fixed_offsets: list[list[float]] | None = None,
     ):
         if num_views <= 0 or height <= 1 or width <= 1:
             raise ValueError("num_views must be positive and spatial sizes must exceed one.")
@@ -51,6 +52,14 @@ class SyntheticNeuralTextureDataset(Dataset[dict[str, Any]]):
             self.offsets = torch.rand(num_views, 2, generator=generator) * (1.0 - view_scale)
         else:
             self.offsets = (torch.rand(num_views, 2, generator=generator) - 0.5) * 0.16
+        if fixed_offsets:
+            if len(fixed_offsets) > num_views:
+                raise ValueError("fixed_offsets cannot exceed num_views")
+            fixed = torch.tensor(fixed_offsets, dtype=torch.float32)
+            maximum = 1.0 - view_scale
+            if fixed.ndim != 2 or fixed.shape[1] != 2 or torch.any(fixed < 0) or torch.any(fixed > maximum):
+                raise ValueError(f"fixed_offsets must have shape [N, 2] with values in [0, {maximum}]")
+            self.offsets[: len(fixed)] = fixed
 
     def __len__(self) -> int:
         return self.num_views
