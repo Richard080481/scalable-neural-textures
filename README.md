@@ -1,158 +1,248 @@
+<div align="center">
+
 # Scalable Neural Textures
 
-This project studies how neural-texture size and UV visibility affect gradient
-communication and multi-GPU scaling. The goal is a reproducible scientific
-workload and scaling analysis, not a new NeRF or rendering architecture.
+### When does adding GPUs make neural-texture training faster—and when does it make it slower?
 
-An RGB texture directly stores `RGB = T(u,v)`. A neural texture stores a
-learned feature vector `z = T_theta(u,v)`, sampled with differentiable bilinear
-filtering; a compact CNN maps that feature image to RGB. Unlike an implicit
-coordinate representation, the learnable signal is an explicit 2D feature
-array rather than an MLP evaluated at each coordinate.
+**PyTorch · DDP/NCCL · Slurm · USC CARC A40 · 3-trial measurements · 19 tests**
+
+[Results](#results) · [Visual gallery](#visual-gallery) · [Method](#method) · [Reproduce](#reproduce) · [CARC guide](docs/carc.md)
+
+<img src="assets/usc_inspired_atlas.png" alt="Original USC-inspired four-quadrant training atlas" width="700">
+
+*Original, unofficial USC-inspired training atlas: lettering, Trojan helmet, campus architecture, and a Southern California sunset.*
+
+</div>
+
+## Project in one minute
+
+A conventional texture stores RGB directly. This project instead learns a
+`1024 × 1024 × 16` feature texture and uses a compact CNN to decode sampled
+features into RGB:
 
 ```text
-UV [B,H,W,2] -> grid_sample(learnable [1,C,Ht,Wt]) -> feature image
-                                                        |
-mask ---------------------------------------------------+-> small CNN -> RGB
+UV coordinates ──> bilinear sample ──> learned feature image ──> CNN ──> RGB
+                         ^                         ^
+                         │                         │
+              neural texture [1,C,H,W]          mask
 ```
 
-## Current status
+The feature texture contains **16.8 million trainable values** and produces a
+**67.1 MB FP32 gradient per rank**. That makes it a useful controlled workload
+for studying distributed training, communication overhead, UV visibility, and
+execution optimization.
 
-The repository provides synthetic and directory datasets, tested UV sampling,
-a configurable texture and renderer, masked L1 training, PSNR evaluation,
-checkpoint resume/load, DDP, fixed-global-batch strong scaling, communication
-timing, UV visibility analysis, `no_sync()` accumulation, profiler traces, and
-automatic visual artifacts. No GPU scaling result is claimed until CARC jobs
-have been run repeatedly on identical hardware.
+The central finding is not simply “more GPUs are faster”:
 
-## Install and test
+> **Multi-GPU speedup depends on the computation-to-communication ratio.** A
+> global batch of 4 became slower with more GPUs; increasing the fixed global
+> batch to 64 and synchronizing once per optimizer step produced a measured
+> **1.19× speedup on 4 A40 GPUs**.
+
+## Results
+
+<div align="center">
+<img src="docs/assets/results_overview.png" alt="Three-panel CARC scaling and optimization results" width="100%">
+</div>
+
+All reported values are the mean of **three trials on NVIDIA A40 GPUs**. The
+4-GPU runs span two CARC nodes. Error bars show one sample standard deviation.
+
+### 1. Workload size determines scaling
+
+| Fixed workload | 1 GPU | 2 GPUs | 4 GPUs | Result |
+|---|---:|---:|---:|---|
+| Complex texture, global batch 4 | **18.60 ms** | 19.85 ms | 39.04 ms | Communication dominates; 4 GPUs are slower |
+| Complex texture, global batch 64 | 314.30 ms | 280.69 ms | **263.17 ms** | 4 GPUs reach **1.19× speedup** |
+
+For global batch 64, throughput increases from **204.74 to 243.39 samples/s**.
+This is fixed-workload strong scaling: every GPU count processes the same 64
+samples and the same number of optimizer steps.
+
+### 2. Execution optimization improves absolute speed
+
+The optimized path combines mixed precision, fused Adam, channels-last
+convolutions, cuDNN autotuning, scheduled visibility analysis, one collective
+for scalar metrics, and one end-of-step synchronization.
+
+| GPUs | Instrumented baseline | Optimized | Step-time reduction |
+|---:|---:|---:|---:|
+| 1 | 24.06 ± 0.32 ms | **18.60 ± 0.36 ms** | **22.7%** |
+| 2 | 24.39 ± 0.44 ms | **19.85 ± 0.14 ms** | **18.6%** |
+| 4 | 41.26 ± 0.38 ms | **39.04 ± 0.33 ms** | **5.4%** |
+
+### 3. `no_sync()` reduces redundant communication
+
+With four gradient-accumulation microsteps on two GPUs, DDP normally
+all-reduces after every microstep. Using `no_sync()` for the first three keeps
+the mathematical workload unchanged while communicating only once.
+
+| Mode | Payload / rank / step | Communication time | Step time |
+|---|---:|---:|---:|
+| Sync every microstep | 67.34 MB | 22.50 ms | 71.89 ms |
+| DDP `no_sync()` | **16.83 MB** | **16.44 ms** | **68.65 ms** |
+
+That is **75% less gradient payload**, approximately **27% less measured
+communication time**, and **4.5% faster steps**.
+
+Raw aggregate values are committed in
+[`results/final_metrics.csv`](results/final_metrics.csv) and
+[`results/no_sync_metrics.csv`](results/no_sync_metrics.csv). Rebuild the figure
+with:
+
+```bash
+python scripts/plot_final_report.py
+```
+
+## Visual gallery
+
+Each animation shows **ground truth, prediction, absolute error, and a PCA
+projection of the learned feature texture**. The full showcase reaches:
+
+| Showcase | Final PSNR | Validation PSNR |
+|---|---:|---:|
+| USC-inspired atlas | 37.45 dB | **33.87 dB** |
+| Voxel atlas | 34.20 dB | **33.42 dB** |
+
+### USC-inspired neural texture
+
+<div align="center">
+<img src="docs/assets/showcase/trojan.gif" alt="Trojan helmet neural-texture training animation" width="100%">
+</div>
+
+Four equally framed UV regions are available:
+
+- [USC lettering animation](docs/assets/showcase/usc.gif)
+- [Trojan helmet animation](docs/assets/showcase/trojan.gif)
+- [Campus architecture animation](docs/assets/showcase/campus.gif)
+- [Southern California sunset animation](docs/assets/showcase/sunset.gif)
+
+The illustration is original and unofficial; it is not an official USC seal or
+licensed athletics asset.
+
+### Original voxel-material atlas
+
+<div align="center">
+<img src="docs/assets/showcase/brick.gif" alt="Brick neural-texture training animation" width="100%">
+</div>
+
+- [Brick animation](docs/assets/showcase/brick.gif)
+- [Leaves animation](docs/assets/showcase/leaves.gif)
+- [Grass and dirt animation](docs/assets/showcase/grass.gif)
+- [Stone animation](docs/assets/showcase/stone.gif)
+
+The voxel materials are generated by this repository and do not copy Minecraft
+or another commercial game's textures. Each animation uses an exact centered
+quadrant crop, so the four materials have equal presentation coverage.
+
+## Method
+
+### Training system
+
+- Explicit learnable feature atlas sampled with `torch.grid_sample`.
+- Compact configurable CNN renderer and masked L1 objective.
+- Deterministic synthetic or on-disk RGB/UV/mask datasets.
+- DDP/NCCL with fixed-global-batch validation and identical sample ordering.
+- Mixed precision, fused Adam, channels-last execution, and `no_sync()`.
+- Per-step loss, PSNR, throughput, memory, visibility, and communication logs.
+- Checkpoint resume, validation rendering, PCA visualization, and GIF export.
+
+### Experiment matrix
+
+| Config | Purpose | Global batch | Texture | Steps |
+|---|---|---:|---:|---:|
+| [`scaling.yaml`](configs/scaling.yaml) | Small synthetic strong scaling | 8 | 512²×16 | 500 |
+| [`usc_scaling.yaml`](configs/usc_scaling.yaml) | Complex small-workload scaling | 4 | 1024²×16 | 300 |
+| [`usc_speed_optimized.yaml`](configs/usc_speed_optimized.yaml) | Execution optimization | 4 | 1024²×16 | 300 |
+| [`usc_large_batch_scaling.yaml`](configs/usc_large_batch_scaling.yaml) | Compute-heavy positive scaling | 64 | 1024²×16 | 200 |
+| [`accumulation_baseline.yaml`](configs/accumulation_baseline.yaml) / [`optimized.yaml`](configs/optimized.yaml) | Every-microstep sync vs `no_sync()` | 16 | 512²×16 | 500 |
+
+The full measurement contract—including warm-up exclusion, fixed workload,
+communication semantics, and required repetitions—is documented in
+[`docs/benchmarking.md`](docs/benchmarking.md).
+
+## Reproduce
+
+### Local installation and tests
 
 ```bash
 python -m venv .venv
-.venv/Scripts/activate              # Windows PowerShell: .venv\Scripts\Activate.ps1
+
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+
+# Linux/macOS
+source .venv/bin/activate
+
 python -m pip install -e ".[dev]"
 pytest
 ```
 
-## Train and evaluate
+Expected result: **19 passed**.
 
-```bash
-python -m neural_texture.train --config configs/smoke_test.yaml --output-dir outputs/smoke
-python -m neural_texture.evaluate --config outputs/smoke/config.yaml \
-  --checkpoint outputs/smoke/checkpoints/step_000030.pt --output-dir outputs/smoke/renders
-```
-
-Resume a run while preserving optimizer state (the configured final step must be
-greater than the checkpoint step):
-
-```bash
-python -m neural_texture.train --config configs/baseline.yaml \
-  --resume outputs/previous/checkpoints/step_000100.pt --output-dir outputs/resumed
-```
-
-To materialize toy files matching the real-data interface:
-
-```bash
-python scripts/create_synthetic_dataset.py --output-dir data/toy
-```
-
-For a real scene, follow [docs/dataset_format.md](docs/dataset_format.md), set
-`data.type: directory` and `data.root`, and verify whether `v_flip` is needed.
-
-Every training run writes its exact config, environment metadata, per-step CSV,
-summary JSON, checkpoints, progress PNGs, and `renders/training_progress.gif`.
-The animation shows ground truth, current prediction, error, and the evolving
-neural texture projected to PCA RGB. Evaluation also writes paired images.
-
-## Distributed scaling
-
-The global batch is fixed by config and divided across ranks; invalid divisions
-fail explicitly. Local examples:
-
-```bash
-torchrun --standalone --nproc_per_node=2 -m neural_texture.train \
-  --config configs/scaling.yaml --output-dir outputs/scaling_2gpu
-python scripts/plot_results.py outputs/scaling_1gpu outputs/scaling_2gpu \
-  --output-dir outputs/plots
-```
-
-For the communication optimization, compare
-`configs/accumulation_baseline.yaml` with `configs/optimized.yaml`. Both have
-identical effective workloads; only the former synchronizes every microstep.
-
-## Voxel texture showcase
-
-`configs/showcase.yaml` trains the same neural-texture architecture on an
-original block-game atlas with staggered brick, clustered leaves, grass/dirt,
-and cobblestone tiles. Each view observes a different local UV crop, making the
-training animation visually recognizable while retaining exact reproducibility.
-It does not copy assets from Minecraft or another commercial game.
+### Local smoke training
 
 ```bash
 python -m neural_texture.train \
-  --config configs/showcase.yaml --output-dir outputs/showcase
+  --config configs/smoke_test.yaml \
+  --output-dir outputs/smoke
 ```
 
-On USC CARC:
+Every run records its resolved config, hardware/software metadata, per-step CSV,
+summary JSON, checkpoints, validation images, progress frames, and animation.
+
+### USC CARC
+
+The repository includes module-safe Slurm scripts for 1, 2, and two-node 4-GPU
+A40 runs:
 
 ```bash
-sbatch slurm/showcase_1gpu_carc.sbatch
+sbatch slurm/train_1gpu_carc.sbatch
+sbatch slurm/train_2gpu_carc.sbatch
+sbatch slurm/train_4gpu_carc.sbatch
 ```
 
-Four equally framed presentation artifacts are written under
-`outputs/showcase_*/renders/{brick,leaves,grass,stone}/training_progress.gif`.
-
-## USC-inspired high-resolution showcase
-
-`configs/usc_showcase.yaml` uses a 1254x1254 original image atlas containing
-four cardinal-and-gold subjects: readable USC lettering, a Trojan helmet,
-Romanesque campus architecture, and a Southern California palm sunset. The
-model learns a 1024x1024x16 neural texture from randomized local UV views, so
-the progress GIF exposes both coarse reconstruction and fine-detail learning.
-The artwork is an unofficial project illustration, not an official USC mark.
+For the compute-heavy scaling experiment, export the same config at every GPU
+count:
 
 ```bash
-sbatch slurm/usc_showcase_1gpu_carc.sbatch
+sbatch --export=ALL,NT_CONFIG=configs/usc_large_batch_scaling.yaml \
+  slurm/train_1gpu_carc.sbatch
+sbatch --export=ALL,NT_CONFIG=configs/usc_large_batch_scaling.yaml \
+  slurm/train_2gpu_carc.sbatch
+sbatch --export=ALL,NT_CONFIG=configs/usc_large_batch_scaling.yaml \
+  slurm/train_4gpu_carc.sbatch
 ```
 
-The source target is `assets/usc_inspired_atlas.png`; the training animation is
-written as four labeled animations under
-`outputs/usc_showcase_1gpu_*/renders/{usc,trojan,campus,sunset}/training_progress.gif`.
+Environment setup, notifications, monitoring, and troubleshooting are in
+[`docs/carc.md`](docs/carc.md).
 
-For a separate strong-scaling measurement of this complex target, use
-`configs/usc_scaling.yaml` unchanged on 1, 2, and 4 GPUs. It keeps the global
-batch fixed at four and uses a shorter 300-step timing run; do not mix these
-measurements with the simpler `configs/scaling.yaml` curve.
+## Repository map
 
-`configs/usc_speed_optimized.yaml` tests an actual acceleration path rather
-than merely diagnosing communication: fused Adam, channels-last convolutions,
-cuDNN autotuning, scheduled visibility work, one collective for scalar metrics,
-and removal of phase-by-phase GPU synchronization. It preserves the model,
-samples, global batch, step count, and validation contract. Compare end-to-end
-step time, wall time, throughput, peak memory, and validation PSNR against
-`configs/usc_scaling.yaml` at each GPU count.
+```text
+configs/                 Reproducible experiment definitions
+docs/                    CARC, benchmarking, and dataset documentation
+docs/assets/             README figures and training animations
+scripts/                 Dataset, plotting, and target-rendering tools
+slurm/                   1/2/4-GPU CARC batch scripts
+src/neural_texture/      Dataset, model, DDP trainer, metrics, visualization
+tests/                   Shape, sampling, training, DDP, and visibility tests
+results/                 Committed aggregate CARC measurements
+```
 
-To test whether additional GPUs become beneficial when computation is large
-enough, `configs/usc_large_batch_scaling.yaml` performs a fixed-global-batch-64
-strong-scaling run. Four `no_sync()` accumulation microsteps keep memory
-bounded and communicate gradients only once per optimizer step. This is the
-appropriate experiment for demonstrating positive multi-GPU scaling without
-changing the total workload.
+## Scope and limitations
 
-## USC CARC
+This is a neural-feature-texture training and systems study—not NeRF, novel-view
+synthesis, or texture compression. The current renderer does not use camera
+direction, normals, or dynamic lighting. The 16-channel FP32 neural texture is
+larger than an RGB texture; its purpose here is learned appearance
+representation and a communication-heavy distributed workload.
 
-CARC environment setup and 1-, 2-, and two-node 4-GPU Slurm templates are in
-[docs/carc.md](docs/carc.md). The account is supplied at submission so no USC
-project ID is committed. The full measurement contract is in
-[docs/benchmarking.md](docs/benchmarking.md).
+The key systems conclusion is deliberately conditional: **more GPUs help only
+when each optimizer step contains enough useful computation to amortize model
+synchronization**. The project demonstrates both sides of that boundary with
+measured CARC results rather than assuming scaling.
 
-## Reproducibility and limitations
+## License
 
-Seeds, resolved config, package/hardware metadata, and checkpoints are saved per
-run. CUDA mixed precision and PyTorch Profiler are configurable. The synthetic
-validation views use the same analytical signal but different UV offsets.
-Current limitations include no SSIM/LPIPS and no sparse-tile synchronization.
-The communication hook reports bucket payload and elapsed collective time; it
-does not infer physical network traffic. No improvement is claimed without
-CARC measurements.
-
+[MIT](LICENSE)
