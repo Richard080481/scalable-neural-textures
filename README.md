@@ -102,7 +102,7 @@ projection of the learned feature texture**. The full showcase reaches:
 | Showcase | Final PSNR | Validation PSNR |
 |---|---:|---:|
 | USC-inspired atlas | 37.45 dB | **33.87 dB** |
-| Voxel atlas | 34.20 dB | **33.42 dB** |
+| Voxel atlas | 34.43 dB | **34.07 dB** |
 
 ### USC-inspired neural texture
 
