@@ -21,8 +21,8 @@ python -m pip install -e '.[dev]'
 pytest
 ```
 
-Submit identical strong-scaling workloads. Replace `<project_id>` and record
-the returned job IDs:
+Submit identical strong-scaling workloads using the account associated with
+your CARC login, and record the returned job IDs:
 
 ```bash
 mkdir -p outputs

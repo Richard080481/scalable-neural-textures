@@ -1,5 +1,5 @@
 #!/bin/bash
-# Submit: sbatch --account=<project_id> slurm/train_2gpu_carc.sbatch
+# Submit: sbatch slurm/train_2gpu_carc.sbatch
 #SBATCH --job-name=nt-2gpu
 #SBATCH --partition=gpu
 #SBATCH --nodes=1

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Two-node, four-A40 example. Confirm availability with noderes before submission.
-# Submit: sbatch --account=<project_id> slurm/train_4gpu_carc.sbatch
+# Submit: sbatch slurm/train_4gpu_carc.sbatch
 #SBATCH --job-name=nt-4gpu
 #SBATCH --partition=gpu
 #SBATCH --nodes=2

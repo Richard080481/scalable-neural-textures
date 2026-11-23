@@ -1,5 +1,5 @@
 #!/bin/bash
-# Submit: sbatch --account=<project_id> slurm/setup_carc.sbatch
+# Submit: sbatch slurm/setup_carc.sbatch
 #SBATCH --job-name=nt-setup
 #SBATCH --partition=main
 #SBATCH --nodes=1
